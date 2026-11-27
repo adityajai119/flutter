@@ -1325,6 +1325,19 @@ class WebReleaseBundle extends Target {
     final Depfile bundledDepfile = _bundleLocalRobotoFallback(environment, depfile);
     final DepfileService depfileService = environment.depFileService;
 
+    // Capture the paths copyAssets wrote before hashWebAssets renames the files
+    // on disk. The lowercase key catches case-only collisions on Windows and
+    // macOS; rejecting them on every platform is deliberate, because a build
+    // that works on Linux would otherwise break when shipped to those systems.
+    final bundledAssetPaths = <String, String>{};
+    for (final File output in bundledDepfile.outputs) {
+      final String assetPath = fileSystem.path.join(
+        'assets',
+        fileSystem.path.relative(output.path, from: outputDirectory.path),
+      );
+      bundledAssetPaths.putIfAbsent(assetPath.toLowerCase(), () => assetPath);
+    }
+
     final bool webContentHash = compileTargets.any(
       (Dart2WebTarget t) => t.compilerConfig.webContentHash,
     );
@@ -1351,6 +1364,30 @@ class WebReleaseBundle extends Target {
     final List<File> inputResourceFiles = webResources.existsSync()
         ? webResources.listSync(recursive: true).whereType<File>().toList()
         : <File>[];
+
+    // Check every web/ resource before copying any of them, so a collision
+    // cannot leave partially copied files without a web_resources.d entry.
+    final collidingResources = <String, String>{};
+    for (final inputFile in inputResourceFiles) {
+      final String relativePath = fileSystem.path.relative(inputFile.path, from: webResources.path);
+      if (relativePath == 'index.html' || relativePath == 'flutter_bootstrap.js') {
+        continue;
+      }
+      final String? assetPath = bundledAssetPaths[relativePath.toLowerCase()];
+      if (assetPath != null) {
+        collidingResources[relativePath] = assetPath;
+      }
+    }
+    if (collidingResources.isNotEmpty) {
+      final String collisions = collidingResources.entries
+          .map((MapEntry<String, String> entry) => '  web/${entry.key} -> ${entry.value}')
+          .join('\n');
+      throwToolExit(
+        'The following web/ resources would overwrite a Flutter asset at the same path:\n'
+        '$collisions\n'
+        'Rename or remove these files in web/ and rebuild.',
+      );
+    }
 
     // Copy other resource files out of web/ directory.
     final copiedInputResourceFiles = <File>[];

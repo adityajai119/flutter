@@ -480,6 +480,130 @@ _flutter.loader.load();
     expect(environment.outputDir.childFile('foo.txt').readAsStringSync(), 'B');
   });
 
+  for (final webAssetPath in <String>[
+    'assets/AssetManifest.bin.json',
+    'assets/assetmanifest.bin.json',
+  ]) {
+    test('WebReleaseBundle rejects $webAssetPath that would overwrite a Flutter asset', () async {
+      environment.defines[kBuildMode] = 'release';
+      final Directory webResources = environment.projectDir.childDirectory('web');
+      webResources.childFile(webAssetPath)
+        ..createSync(recursive: true)
+        ..writeAsStringSync('from web');
+      environment.buildDir.childFile('main.dart.js').createSync();
+      environment.buildDir.childFile('main.dart.js.info.json').createSync();
+      environment.buildDir.childFile('main.dart.js.map').createSync();
+
+      await expectLater(
+        WebReleaseBundle(
+          <WebCompilerConfig>[const JsCompilerConfig()],
+          const NoOpAnalytics(),
+          engineRevision: _kEngineRevision,
+        ).build(environment),
+        throwsToolExit(message: 'web/$webAssetPath -> assets/AssetManifest.bin.json'),
+      );
+    });
+  }
+
+  test('WebReleaseBundle rejects web resources that collide with pubspec assets', () async {
+    environment.defines[kBuildMode] = 'release';
+    environment.projectDir.childFile('pubspec.yaml').writeAsStringSync('''
+name: my_app
+flutter:
+  assets:
+    - images/logo.png
+''');
+    environment.projectDir.childFile('images/logo.png')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('flutter asset');
+    environment.projectDir.childFile('web/assets/images/logo.png')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('from web');
+    environment.buildDir.childFile('main.dart.js').createSync();
+    environment.buildDir.childFile('main.dart.js.info.json').createSync();
+    environment.buildDir.childFile('main.dart.js.map').createSync();
+
+    await expectLater(
+      WebReleaseBundle(
+        <WebCompilerConfig>[const JsCompilerConfig()],
+        const NoOpAnalytics(),
+        engineRevision: _kEngineRevision,
+      ).build(environment),
+      throwsToolExit(message: 'web/assets/images/logo.png -> assets/images/logo.png'),
+    );
+  });
+
+  test('WebReleaseBundle rejects colliding web resources with --web-content-hash', () async {
+    environment.defines[kBuildMode] = 'release';
+    environment.projectDir.childFile('web/assets/AssetManifest.bin.json')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('from web');
+    environment.outputDir.childFile('flutter_bootstrap.js')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('_flutter.buildConfig = {"engineRevision":"abc","builds":[]};\n');
+    environment.outputDir.childFile('index.html')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        '<script>_flutter.buildConfig = {"engineRevision":"abc","builds":[]};</script>\n',
+      );
+    environment.buildDir.childFile('main.dart.js').createSync();
+    environment.buildDir.childFile('main.dart.js.info.json').createSync();
+    environment.buildDir.childFile('main.dart.js.map').createSync();
+
+    await expectLater(
+      WebReleaseBundle(
+        <WebCompilerConfig>[const JsCompilerConfig(webContentHash: true)],
+        const NoOpAnalytics(),
+        engineRevision: _kEngineRevision,
+      ).build(environment),
+      throwsToolExit(message: 'web/assets/AssetManifest.bin.json -> assets/AssetManifest.bin.json'),
+    );
+  });
+
+  test('WebReleaseBundle copies non-colliding web/assets files', () async {
+    environment.defines[kBuildMode] = 'release';
+    environment.projectDir.childFile('web/assets/splash.png')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('from web');
+    environment.buildDir.childFile('main.dart.js').createSync();
+    environment.buildDir.childFile('main.dart.js.info.json').createSync();
+    environment.buildDir.childFile('main.dart.js.map').createSync();
+
+    await WebReleaseBundle(
+      <WebCompilerConfig>[const JsCompilerConfig()],
+      const NoOpAnalytics(),
+      engineRevision: _kEngineRevision,
+    ).build(environment);
+
+    expect(environment.outputDir.childFile('assets/splash.png').readAsStringSync(), 'from web');
+  });
+
+  test('WebReleaseBundle validates all web collisions before copying resource files', () async {
+    environment.defines[kBuildMode] = 'release';
+    final Directory webResources = environment.projectDir.childDirectory('web');
+    webResources.childFile('assets/0-kept.txt')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('kept');
+    webResources.childFile('assets/AssetManifest.bin.json')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('from web');
+    environment.buildDir.childFile('main.dart.js').createSync();
+    environment.buildDir.childFile('main.dart.js.info.json').createSync();
+    environment.buildDir.childFile('main.dart.js.map').createSync();
+
+    await expectLater(
+      WebReleaseBundle(
+        <WebCompilerConfig>[const JsCompilerConfig()],
+        const NoOpAnalytics(),
+        engineRevision: _kEngineRevision,
+      ).build(environment),
+      throwsToolExit(message: 'web/assets/AssetManifest.bin.json -> assets/AssetManifest.bin.json'),
+    );
+
+    expect(environment.outputDir.childFile('assets/0-kept.txt'), isNot(exists));
+    expect(environment.buildDir.childFile('web_resources.d'), isNot(exists));
+  });
+
   test('WebReleaseBundle copies over output files when they change', () async {
     final Directory webResources = environment.projectDir.childDirectory('web');
     webResources.childFile('foo.txt')
