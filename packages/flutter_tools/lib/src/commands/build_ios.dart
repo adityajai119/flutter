@@ -229,7 +229,7 @@ class BuildIOSArchiveCommand extends _BuildIOSSubCommand {
     } on FormatException catch (e) {
       logger.printError(
         'Image asset manifest at "${contentsJsonFile.path}" was invalid JSON. '
-        'Ensure the file contains valid JSON (for example, remove any trailing commas).\n'
+        'Ensure the file contains valid JSON (for example, remove any trailing commas). '
         'Details: $e',
       );
       return <_ImageAssetFileKey, String>{};

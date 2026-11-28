@@ -1661,8 +1661,6 @@ void main() {
   });
 
   test('Validate template launch images with conflicts', () async {
-    const projectLaunchImageContentsJsonPath =
-        'ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json';
     const projectLaunchImagePath =
         'ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@2x.png';
     const templateLaunchImageContentsJsonPath =
@@ -1694,7 +1692,7 @@ void main() {
             ..createSync(recursive: true)
             ..writeAsBytes(<int>[1, 2, 3]);
 
-          fileSystem.file(projectLaunchImageContentsJsonPath)
+          fileSystem.file(_projectLaunchImageContentsJsonPath)
             ..createSync(recursive: true)
             ..writeAsStringSync('''
 {
@@ -1733,8 +1731,6 @@ void main() {
   });
 
   test('Validate template launch images without conflicts', () async {
-    const projectLaunchImageContentsJsonPath =
-        'ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json';
     const projectLaunchImagePath =
         'ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@2x.png';
     const templateLaunchImageContentsJsonPath =
@@ -1766,7 +1762,7 @@ void main() {
             ..createSync(recursive: true)
             ..writeAsBytes(<int>[1, 2, 3]);
 
-          fileSystem.file(projectLaunchImageContentsJsonPath)
+          fileSystem.file(_projectLaunchImageContentsJsonPath)
             ..createSync(recursive: true)
             ..writeAsStringSync('''
 {
@@ -1806,7 +1802,7 @@ void main() {
     );
   });
 
-  void createErrorFreeArchiveMockFiles(FileSystem fs) {
+  void createMockProjectWithPubspecAndInfoPlist(FileSystem fs) {
     fs.file('pubspec.yaml').writeAsStringSync('name: my_app\nversion: 1.0.0+1\n');
     fs.file(fs.path.join('ios', 'Runner', 'Info.plist'))
       ..createSync(recursive: true)
@@ -1833,14 +1829,11 @@ void main() {
   test(
     'Validate launch image logs error and does not crash when Contents.json has invalid JSON',
     () async {
-      const projectLaunchImageContentsJsonPath =
-          'ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json';
-
       fakeProcessManager.addCommands(<FakeCommand>[
         setUpFakeXcodeBuildHandler(
           onRun: (_) {
             createArchiveInfoPlist(fileSystem);
-            fileSystem.file(projectLaunchImageContentsJsonPath)
+            fileSystem.file(_projectLaunchImageContentsJsonPath)
               ..createSync(recursive: true)
               ..writeAsStringSync('''
 {
@@ -1863,17 +1856,20 @@ void main() {
       ]);
 
       createMinimalMockProjectFiles();
-      createErrorFreeArchiveMockFiles(fileSystem);
+      createMockProjectWithPubspecAndInfoPlist(fileSystem);
 
       final BuildCommand command = createBuildCommand();
-      await createTestCommandRunner(command).run(<String>['build', 'ipa', '--no-pub']);
+      await expectLater(
+        createTestCommandRunner(command).run(<String>['build', 'ipa', '--no-pub']),
+        completes,
+      );
 
       expect(fakeProcessManager, hasNoRemainingExpectations);
       expect(
         logger.errorText,
         contains(
-          'Image asset manifest at "$projectLaunchImageContentsJsonPath" was invalid JSON. '
-          'Ensure the file contains valid JSON (for example, remove any trailing commas).\n'
+          'Image asset manifest at "$_projectLaunchImageContentsJsonPath" was invalid JSON. '
+          'Ensure the file contains valid JSON (for example, remove any trailing commas). '
           'Details: FormatException: Unexpected character (at line 8, character 3)',
         ),
       );
@@ -1883,14 +1879,12 @@ void main() {
   test('Validate launch image logs error and does not crash when reading Contents.json throws FileSystemException', () async {
     final exceptionHandler = FileExceptionHandler();
     fileSystem = MemoryFileSystem.test(opHandle: exceptionHandler.opHandle);
-    const projectLaunchImageContentsJsonPath =
-        'ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json';
 
     fakeProcessManager.addCommands(<FakeCommand>[
       setUpFakeXcodeBuildHandler(
         onRun: (_) {
           createArchiveInfoPlist(fileSystem);
-          final File contentsFile = fileSystem.file(projectLaunchImageContentsJsonPath)
+          final File contentsFile = fileSystem.file(_projectLaunchImageContentsJsonPath)
             ..createSync(recursive: true)
             ..writeAsStringSync('{}');
           exceptionHandler.addError(
@@ -1904,7 +1898,7 @@ void main() {
     ]);
 
     createMinimalMockProjectFiles();
-    createErrorFreeArchiveMockFiles(fileSystem);
+    createMockProjectWithPubspecAndInfoPlist(fileSystem);
 
     final BuildCommand command = createBuildCommand();
     await createTestCommandRunner(command).run(<String>['build', 'ipa', '--no-pub']);
@@ -1913,7 +1907,7 @@ void main() {
     expect(
       logger.errorText,
       contains(
-        'Failed to read image asset manifest at "$projectLaunchImageContentsJsonPath": '
+        'Failed to read image asset manifest at "$_projectLaunchImageContentsJsonPath": '
         'FileSystemException: Permission denied',
       ),
     );
@@ -1938,7 +1932,7 @@ void main() {
       ]);
 
       createMinimalMockProjectFiles();
-      createErrorFreeArchiveMockFiles(fileSystem);
+      createMockProjectWithPubspecAndInfoPlist(fileSystem);
 
       final BuildCommand command = createBuildCommand();
       await expectToolExitLater(
@@ -1959,14 +1953,11 @@ void main() {
   test(
     'Validate launch image logs error and does not crash when Contents.json is not a JSON object',
     () async {
-      const projectLaunchImageContentsJsonPath =
-          'ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json';
-
       fakeProcessManager.addCommands(<FakeCommand>[
         setUpFakeXcodeBuildHandler(
           onRun: (_) {
             createArchiveInfoPlist(fileSystem);
-            fileSystem.file(projectLaunchImageContentsJsonPath)
+            fileSystem.file(_projectLaunchImageContentsJsonPath)
               ..createSync(recursive: true)
               ..writeAsStringSync('["not", "an", "object"]');
           },
@@ -1975,7 +1966,7 @@ void main() {
       ]);
 
       createMinimalMockProjectFiles();
-      createErrorFreeArchiveMockFiles(fileSystem);
+      createMockProjectWithPubspecAndInfoPlist(fileSystem);
 
       final BuildCommand command = createBuildCommand();
       await createTestCommandRunner(command).run(<String>['build', 'ipa', '--no-pub']);
@@ -1984,7 +1975,7 @@ void main() {
       expect(
         logger.errorText,
         contains(
-          'Image asset manifest at "$projectLaunchImageContentsJsonPath" must be a JSON object.',
+          'Image asset manifest at "$_projectLaunchImageContentsJsonPath" must be a JSON object.',
         ),
       );
     },
@@ -1995,8 +1986,6 @@ void main() {
     () async {
       const projectIconContentsJsonPath =
           'ios/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json';
-      const projectLaunchImageContentsJsonPath =
-          'ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json';
 
       fakeProcessManager.addCommands(<FakeCommand>[
         setUpFakeXcodeBuildHandler(
@@ -2039,7 +2028,7 @@ void main() {
   }
 }
 ''');
-            fileSystem.file(projectLaunchImageContentsJsonPath)
+            fileSystem.file(_projectLaunchImageContentsJsonPath)
               ..createSync(recursive: true)
               ..writeAsStringSync('''
 {
@@ -2078,7 +2067,7 @@ void main() {
       ]);
 
       createMinimalMockProjectFiles();
-      createErrorFreeArchiveMockFiles(fileSystem);
+      createMockProjectWithPubspecAndInfoPlist(fileSystem);
 
       final BuildCommand command = createBuildCommand();
       await createTestCommandRunner(command).run(<String>['build', 'ipa', '--no-pub']);
@@ -2089,5 +2078,7 @@ void main() {
   );
 }
 
+const _projectLaunchImageContentsJsonPath =
+    'ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json';
 const _xcBundleFilePath = '/.tmp_rand0/flutter_ios_build_temp_dirrand0/temporary_xcresult_bundle';
 const _exportOptionsPlist = '/.tmp_rand0/flutter_build_ios.rand0/ExportOptions.plist';
